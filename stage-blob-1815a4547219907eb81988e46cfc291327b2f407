@@ -1,0 +1,65 @@
+name: "Install Dafny"
+description: "Install a packaged release of Dafny"
+branding:
+  icon: check-circle
+  color: green
+inputs:
+  dafny-version:
+    description: "Dafny version to install"
+    required: true
+    default: "3.1.0"
+  build-from-source:
+    description: "dafny-lang/dafny commit-ish to build"
+    required: false
+runs:
+  using: "composite"
+  steps:
+
+  - uses: actions/setup-dotnet@v4
+    with:
+      dotnet-version: '9.0.x'
+
+  # For the reportgenerator and older Dafnyies
+  - uses: actions/setup-dotnet@v4
+    with:
+      dotnet-version: '6.0.x'
+
+  # The first call to `dotnet tool` on a fresh runner sometimes takes multiple minutes,
+  # perhaps because it is lazily downloading and installing assets.
+  # It helps to hit that here so we don't hit it in a mocha test with a tight timeout.
+  - name: Warm up dotnet tool
+    run: dotnet tool search --help
+    shell: bash
+
+  - name: Add .NET global tools to PATH
+    shell: bash
+    run: |
+      dotnet_home="${DOTNET_CLI_HOME:-}"
+      if [[ -z "$dotnet_home" ]]; then
+        if [[ "$RUNNER_OS" == "Windows" ]]; then
+          dotnet_home="$USERPROFILE"
+        else
+          dotnet_home="$HOME"
+        fi
+      fi
+      dotnet_tools="$dotnet_home/.dotnet/tools"
+      if [[ "$RUNNER_OS" == "Windows" ]]; then
+        dotnet_tools="$(cygpath -w "$dotnet_tools")"
+      fi
+      printf '%s\n' "$dotnet_tools" >> "$GITHUB_PATH"
+
+  - if: ${{ !inputs.build-from-source }}
+    uses: actions/setup-node@v4
+    with:
+      node-version: '24'
+  - if: ${{ !inputs.build-from-source }}
+    run: node $GITHUB_ACTION_PATH/dist/index.js
+    shell: bash
+    env:
+      INPUT_DAFNY-VERSION: ${{ inputs.dafny-version }}
+
+  - if: ${{ inputs.build-from-source }}
+    uses: dafny-lang/setup-dafny-from-source-action@v1
+    with:
+      dafny-version: ${{ inputs.dafny-version }}
+      ref: ${{ inputs.build-from-source }}
